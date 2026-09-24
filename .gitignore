@@ -1,0 +1,21 @@
+# Chrome profiles holding the LoreMotion Google session. NEVER commit.
+.loremotion-chrome-profile/
+.lm-chrome-profile/
+.chrome-profile*/
+*.mp4
+*.webm
+*.jpg
+*.png
+*.webp
+loremotion-output/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.env
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
