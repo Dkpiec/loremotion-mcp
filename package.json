@@ -1,0 +1,27 @@
+{
+  "name": "loremotion-mcp",
+  "version": "1.0.0",
+  "description": "MCP server that drives LoreMotion.com through Playwright using a persistent Google-authenticated LoreMotion browser profile.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "login": "node scripts/login.js",
+    "probe": "node scripts/probe.js",
+    "check": "node --check src/server.js && node --check src/loremotion.js && node --check src/browser.js && node --check src/config.js && node --check scripts/login.js && node --check scripts/verify-login.js && node --check scripts/probe.js && node --check scripts/soak-test.js",
+    "install-browser": "playwright install chromium",
+    "soak-test": "node scripts/soak-test.js",
+    "smoke-anonymous": "node scripts/soak-test.js --anonymous true --ltx-runs 1 --h3-runs 0 --verify-history false --require-signed-in false",
+    "verify-login": "node scripts/verify-login.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.1.0",
+    "dotenv": "^17.2.2",
+    "playwright": "^1.63.0",
+    "zod": "^4.1.11",
+    "@modelcontextprotocol/client": "^2.1.0"
+  }
+}

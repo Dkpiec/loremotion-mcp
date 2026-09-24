@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "loremotion": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/loremotion-mcp/src/server.js"],
+      "env": {
+        "LOREMOTION_SESSION_MODE": "persistent",
+        "LOREMOTION_PROFILE_DIR": "/ABSOLUTE/PATH/TO/loremotion-mcp/.loremotion-profile",
+        "LOREMOTION_DOWNLOAD_DIR": "/ABSOLUTE/PATH/TO/loremotion-mcp/downloads",
+        "LOREMOTION_HEADLESS": "false",
+        "LOREMOTION_BROWSER_CHANNEL": "chrome"
+      }
+    }
+  }
+}
