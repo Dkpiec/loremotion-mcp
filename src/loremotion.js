@@ -175,9 +175,42 @@ async function chooseAspect(page, aspect) {
   throw new Error(`Could not select aspect ratio ${aspect}.`);
 }
 
+// LoreMotion exposes duration as a native range slider on some models/accounts.
+// React controls the input, so we must write through the prototype setter and
+// redispatch the input event, otherwise the app ignores the change.
+async function setRangeDuration(page, seconds) {
+  const sliders = page.locator('input[type="range"]');
+  for (let i = 0; i < await sliders.count(); i++) {
+    const slider = sliders.nth(i);
+    try {
+      const min = Number(await slider.getAttribute('min'));
+      const max = Number(await slider.getAttribute('max'));
+      if (!Number.isFinite(min) || !Number.isFinite(max)) continue;
+      if (seconds > max) {
+        throw new Error(`Requested ${seconds}s but the duration slider currently caps at ${max}s for this model/account tier.`);
+      }
+      if (seconds < min) continue;
+      await slider.evaluate((el, val) => {
+        const proto = window.HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+        if (setter) setter.call(el, String(val)); else el.value = String(val);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, seconds);
+      // Confirm the app accepted the value rather than silently reverting it.
+      const after = Number(await slider.inputValue());
+      if (after === seconds) return true;
+    } catch (err) {
+      if (/caps at/.test(err.message)) throw err;
+    }
+  }
+  return false;
+}
+
 async function chooseDuration(page, seconds) {
   if (await selectByLabel(page, /duration|length/i, durationLabels(seconds))) return;
   if (await selectNativeByOptionText(page, durationLabels(seconds))) return;
+  if (await setRangeDuration(page, seconds)) return;
   if (await clickOverrideControl(page, 'duration', durationLabels(seconds))) return;
   if (await clickTextChoice(page, durationLabels(seconds))) return;
   throw new Error(`Could not select ${seconds}s. LoreMotion may not expose that duration for the selected model/account tier.`);
