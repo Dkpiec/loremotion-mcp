@@ -107,7 +107,7 @@ LOREMOTION_DOWNLOAD_DIR=/opt/loremotion-mcp/downloads
 LOREMOTION_HEADLESS=true
 LOREMOTION_BROWSER_CHANNEL=
 LOREMOTION_EXECUTABLE_PATH=/opt/ms-playwright/chromium_headless_shell/chrome-linux/headless_shell
-LOREMOTION_LAUNCH_ARGS=--no-sandbox,--disable-dev-shm-usage,--disable-gpu
+LOREMOTION_LAUNCH_ARGS=--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--single-process
 ```
 
 If your VPS already exports Playwright variables, this also works:
@@ -377,7 +377,7 @@ Reports are written under `reports/soak-<timestamp>/`.
 | `LOREMOTION_HEADLESS` | `true` on the VPS; `false` for interactive desktop login. |
 | `LOREMOTION_EXECUTABLE_PATH` | Bare browser executable path; takes precedence over channel. Falls back to `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`. |
 | `LOREMOTION_BROWSER_CHANNEL` | Optional named Playwright browser channel such as `chrome`; leave empty for headless shell. |
-| `LOREMOTION_LAUNCH_ARGS` | Comma-separated launch args. Defaults to `--no-sandbox,--disable-dev-shm-usage,--disable-gpu`. |
+| `LOREMOTION_LAUNCH_ARGS` | Comma-separated launch args. Defaults to `--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--single-process`. |
 | `LOREMOTION_TIMEOUT_MS` | Normal Playwright action timeout. |
 | `LOREMOTION_GENERATION_TIMEOUT_MS` | Video generation wait timeout. |
 | `LOREMOTION_SLOW_MO_MS` | Optional Playwright slow motion. |
