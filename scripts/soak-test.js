@@ -67,7 +67,6 @@ const transport = new StdioClientTransport({
   cwd: root,
   env: {
     ...process.env,
-    LOREMOTION_HEADLESS: process.env.LOREMOTION_HEADLESS || 'false',
     LOREMOTION_GENERATION_TIMEOUT_MS: String(config.timeoutMs),
     LOREMOTION_SESSION_MODE: config.anonymous ? 'anonymous' : (process.env.LOREMOTION_SESSION_MODE || 'persistent'),
   },

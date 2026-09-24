@@ -6,7 +6,16 @@ import { LoreMotionClient } from '../src/loremotion.js';
 import { config } from '../src/config.js';
 
 if (config.sessionMode !== 'persistent') {
-  throw new Error('Google login requires LOREMOTION_SESSION_MODE=persistent. Update .env and run npm run login again.');
+  console.error('Google login requires LOREMOTION_SESSION_MODE=persistent. Update .env and run npm run login again.');
+  process.exit(2);
+}
+
+if (!input.isTTY || !output.isTTY) {
+  console.error('Interactive Google login is unavailable because stdin/stdout is not a TTY.');
+  console.error('For headless/agent operation, authenticate the LoreMotion browser profile on a desktop, copy/archive it to this server, then run:');
+  console.error('  npm run import-profile -- /path/to/profile-or-archive');
+  console.error('You may also set LOREMOTION_PROFILE_IMPORT_PATH for scripted setup.');
+  process.exit(2);
 }
 
 const browser = new BrowserManager({ forceHeaded: true });
@@ -43,7 +52,7 @@ try {
 }
 
 if (!verified) {
-  console.error('Google/LoreMotion login was not verified. Re-run: npm run login');
+  console.error('Google/LoreMotion login was not verified. Re-run `npm run login` on an interactive desktop, or use `npm run import-profile -- <path>` on a headless server.');
   process.exitCode = 1;
 } else {
   console.log('Login setup complete. Verify any time with: npm run verify-login');

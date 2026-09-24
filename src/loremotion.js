@@ -22,7 +22,7 @@ const defaults = {
   generate: ['button:has-text("Generate")', '[role="button"]:has-text("Generate")'],
   model: ['select[name*="model" i]', '[aria-label*="model" i]', '[data-testid*="model" i]'],
   aspect: ['select[name*="aspect" i]', '[aria-label*="aspect" i]', '[data-testid*="aspect" i]'],
-  duration: ['select[name*="duration" i]', '[aria-label*="duration" i]', '[data-testid*="duration" i]'],
+  duration: ['input[type="range"]', 'select[name*="duration" i]', '[aria-label*="duration" i]', '[data-testid*="duration" i]'],
   video: ['video[src]', 'video source[src]'],
   download: ['a[download]', 'a[href*=".mp4"]', 'button:has-text("Download")', 'a:has-text("Download")']
 };
@@ -175,56 +175,89 @@ async function chooseAspect(page, aspect) {
   throw new Error(`Could not select aspect ratio ${aspect}.`);
 }
 
-// LoreMotion exposes duration as a native range slider on some models/accounts.
-// React controls the input, so we must write through the prototype setter and
-// redispatch the input event, otherwise the app ignores the change.
-async function setRangeDuration(page, seconds) {
-  const sliders = page.locator('input[type="range"]');
-  for (let i = 0; i < await sliders.count(); i++) {
-    const slider = sliders.nth(i);
-    try {
-      const min = Number(await slider.getAttribute('min'));
-      const max = Number(await slider.getAttribute('max'));
-      if (!Number.isFinite(min) || !Number.isFinite(max)) continue;
-      if (seconds > max) {
-        throw new Error(`Requested ${seconds}s but the duration slider currently caps at ${max}s for this model/account tier.`);
-      }
-      if (seconds < min) continue;
-      await slider.evaluate((el, val) => {
-        const proto = window.HTMLInputElement.prototype;
-        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-        if (setter) setter.call(el, String(val)); else el.value = String(val);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, seconds);
-      // Confirm the app accepted the value rather than silently reverting it.
-      const after = Number(await slider.inputValue());
-      if (after === seconds) return true;
-    } catch (err) {
-      if (/caps at/.test(err.message)) throw err;
-    }
+async function findDurationRange(page) {
+  const ranges = page.locator('input[type="range"]');
+  let best = null;
+  let bestScore = -1;
+
+  for (let i = 0; i < await ranges.count(); i++) {
+    const range = ranges.nth(i);
+    if (!await range.isVisible().catch(() => false)) continue;
+    const meta = await range.evaluate((el) => {
+      const parent = el.closest('label,[role="group"],div') || el.parentElement;
+      return {
+        min: el.min || null,
+        max: el.max || null,
+        step: el.step || null,
+        value: el.value || null,
+        name: el.getAttribute('name'),
+        ariaLabel: el.getAttribute('aria-label'),
+        contextText: (parent?.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 240)
+      };
+    });
+    let score = 0;
+    const hint = `${meta.name || ''} ${meta.ariaLabel || ''} ${meta.contextText || ''}`;
+    if (/duration|length|seconds?|\bsec\b/i.test(hint)) score += 10;
+    const max = Number(meta.max);
+    const min = Number(meta.min);
+    if (Number.isFinite(max) && max > 0 && max <= 60) score += 3;
+    if (Number.isFinite(min) && min >= 0) score += 1;
+    if (score > bestScore) { best = range; bestScore = score; }
   }
-  return false;
+  return best;
+}
+
+async function setRangeDuration(page, seconds) {
+  const range = await findDurationRange(page);
+  if (!range) return false;
+
+  const attrs = await range.evaluate((el) => ({ min: el.min, max: el.max, step: el.step, value: el.value }));
+  const min = attrs.min === '' ? 0 : Number(attrs.min);
+  const max = attrs.max === '' ? 100 : Number(attrs.max);
+  if (Number.isFinite(max) && seconds > max) {
+    throw new Error(`Requested ${seconds}s exceeds the LoreMotion duration slider maximum of ${max}s for the selected model/account tier.`);
+  }
+  if (Number.isFinite(min) && seconds < min) {
+    throw new Error(`Requested ${seconds}s is below the LoreMotion duration slider minimum of ${min}s for the selected model/account tier.`);
+  }
+
+  await range.evaluate((el, desired) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (!setter) throw new Error('HTMLInputElement value setter is unavailable.');
+    setter.call(el, String(desired));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, seconds);
+
+  const actual = Number(await range.inputValue());
+  if (!Number.isFinite(actual) || actual !== Number(seconds)) {
+    throw new Error(`LoreMotion duration slider did not accept ${seconds}s (actual value: ${await range.inputValue()}).`);
+  }
+  return true;
 }
 
 async function chooseDuration(page, seconds) {
+  // Current LoreMotion uses input[type=range]. Handle it first so React sees the
+  // native value setter plus input/change events, then retain legacy fallbacks.
+  if (await setRangeDuration(page, seconds)) return;
   if (await selectByLabel(page, /duration|length/i, durationLabels(seconds))) return;
   if (await selectNativeByOptionText(page, durationLabels(seconds))) return;
-  if (await setRangeDuration(page, seconds)) return;
   if (await clickOverrideControl(page, 'duration', durationLabels(seconds))) return;
   if (await clickTextChoice(page, durationLabels(seconds))) return;
   throw new Error(`Could not select ${seconds}s. LoreMotion may not expose that duration for the selected model/account tier.`);
 }
 
 async function fillPrompt(page, prompt) {
-  try {
-    const semantic = page.getByRole('textbox', { name: /prompt|describe|scene|video/i }).first();
-    if (await semantic.count() && await semantic.isVisible()) {
-      await semantic.fill(prompt);
-      return;
-    }
-  } catch {}
-  const loc = await firstVisible(page, selectors('prompt'));
+  // The live prompt textarea currently has a placeholder but no accessible name.
+  // Prefer placeholder matching and only then fall back to generic configured selectors.
+  const preferred = await firstVisible(page, [
+    'textarea[placeholder*="prompt" i]',
+    'textarea[placeholder*="describe" i]',
+    'textarea[placeholder*="scene" i]',
+    'textarea[placeholder*="video" i]',
+    'textarea[placeholder]'
+  ]);
+  const loc = preferred || await firstVisible(page, selectors('prompt'));
   if (!loc) throw new Error('Could not find the prompt field.');
   if ((await loc.getAttribute('contenteditable')) === 'true') {
     await loc.click();
@@ -246,22 +279,51 @@ async function uploadImage(page, imagePath) {
   await input.setInputFiles(resolved);
 }
 
+
+const TURNSTILE_ERROR = 'Cloudflare challenge present; a signed-in profile or different egress is required';
+
+async function hasBlockingTurnstile(page) {
+  const state = await page.evaluate(() => {
+    const responses = [...document.querySelectorAll('input[type="hidden"][name="cf-turnstile-response"]')];
+    if (!responses.length) return { present: false, solved: false, visible: false, textHint: false };
+    const solved = responses.some((el) => Boolean((el.value || '').trim()));
+    const candidates = [
+      ...document.querySelectorAll('iframe[src*="challenges.cloudflare.com"]'),
+      ...document.querySelectorAll('.cf-turnstile,[data-sitekey]')
+    ];
+    const visible = candidates.some((el) => {
+      const r = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity || 1) !== 0;
+    });
+    const text = (document.body?.innerText || '').toLowerCase();
+    const textHint = /verify you are human|checking your browser|cloudflare|security verification|challenge/.test(text);
+    return { present: true, solved, visible, textHint };
+  }).catch(() => ({ present: false, solved: false, visible: false, textHint: false }));
+  return state.present && !state.solved && (state.visible || state.textHint);
+}
+
+async function assertNoBlockingTurnstile(page) {
+  if (await hasBlockingTurnstile(page)) throw new Error(TURNSTILE_ERROR);
+}
+
 async function clickGenerate(page) {
+  await assertNoBlockingTurnstile(page);
+
+  let btn = null;
   try {
-    const btn = page.getByRole('button', { name: /generate/i }).first();
-    if (await btn.count() && await btn.isVisible()) {
-      await btn.waitFor({ state: 'visible' });
-      for (let i = 0; i < 20 && await btn.isDisabled().catch(() => false); i++) await sleep(250);
-      if (await btn.isDisabled().catch(() => false)) throw new Error('Generate button stayed disabled after filling the form.');
-      await btn.click();
-      return;
-    }
+    const semantic = page.getByRole('button', { name: /generate/i }).first();
+    if (await semantic.count() && await semantic.isVisible()) btn = semantic;
   } catch {}
-  const btn = await firstVisible(page, selectors('generate'));
+  if (!btn) btn = await firstVisible(page, selectors('generate'));
   if (!btn) throw new Error('Could not find the Generate button.');
+
+  await btn.waitFor({ state: 'visible' });
   for (let i = 0; i < 20 && await btn.isDisabled().catch(() => false); i++) await sleep(250);
   if (await btn.isDisabled().catch(() => false)) throw new Error('Generate button stayed disabled after filling the form.');
   await btn.click();
+  await page.waitForTimeout(750).catch(() => {});
+  await assertNoBlockingTurnstile(page);
 }
 
 async function snapshotMedia(page) {
@@ -300,6 +362,7 @@ async function waitForNewResult(page, before, timeoutMs, historyProbe) {
       } catch {}
     }
 
+    await assertNoBlockingTurnstile(page);
     const body = (await page.locator('body').innerText().catch(() => '')).toLowerCase();
     if (/generation failed|render failed|something went wrong|error generating/.test(body)) {
       throw new Error('LoreMotion reported a generation failure.');
@@ -467,8 +530,34 @@ export class LoreMotionClient {
         title: document.title,
         buttons: [...document.querySelectorAll('button')].map(x => (x.innerText || x.getAttribute('aria-label') || '').trim()).filter(Boolean).slice(0, 80),
         inputs: [...document.querySelectorAll('input,textarea,select,[contenteditable=true]')].map(x => ({
-          tag: x.tagName.toLowerCase(), type: x.getAttribute('type'), name: x.getAttribute('name'), placeholder: x.getAttribute('placeholder'), ariaLabel: x.getAttribute('aria-label')
+          tag: x.tagName.toLowerCase(), type: x.getAttribute('type'), name: x.getAttribute('name'), placeholder: x.getAttribute('placeholder'), ariaLabel: x.getAttribute('aria-label'),
+          min: x.getAttribute('min'), max: x.getAttribute('max'), step: x.getAttribute('step'), value: 'value' in x ? x.value : null
         })).slice(0, 80),
+        durationSliders: [...document.querySelectorAll('input[type="range"]')].map(x => ({
+          min: x.min || null, max: x.max || null, step: x.step || null, value: x.value || null,
+          name: x.getAttribute('name'), ariaLabel: x.getAttribute('aria-label'),
+          contextText: ((x.closest('label,[role="group"],div') || x.parentElement)?.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 240)
+        })),
+        durationSliderMax: (() => {
+          const ranges = [...document.querySelectorAll('input[type="range"]')];
+          let best = null;
+          let bestScore = -1;
+          for (const x of ranges) {
+            const parent = x.closest('label,[role="group"],div') || x.parentElement;
+            const hint = `${x.getAttribute('name') || ''} ${x.getAttribute('aria-label') || ''} ${(parent?.innerText || '')}`;
+            let score = /duration|length|seconds?|\bsec\b/i.test(hint) ? 10 : 0;
+            const max = Number(x.max);
+            const min = Number(x.min);
+            if (Number.isFinite(max) && max > 0 && max <= 60) score += 3;
+            if (Number.isFinite(min) && min >= 0) score += 1;
+            if (score > bestScore) { best = x; bestScore = score; }
+          }
+          return best && Number.isFinite(Number(best.max)) ? Number(best.max) : null;
+        })(),
+        turnstile: {
+          present: Boolean(document.querySelector('input[type="hidden"][name="cf-turnstile-response"]')),
+          solved: [...document.querySelectorAll('input[type="hidden"][name="cf-turnstile-response"]')].some(x => Boolean((x.value || '').trim()))
+        },
         links: [...document.querySelectorAll('a[href]')].map(x => ({ text: (x.innerText || '').trim(), href: x.getAttribute('href') })).slice(0, 80)
       }));
       return { ...ui, screenshot };

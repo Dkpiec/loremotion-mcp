@@ -1,6 +1,6 @@
 {
   "name": "loremotion-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server that drives LoreMotion.com through Playwright using a persistent Google-authenticated LoreMotion browser profile.",
   "type": "module",
   "private": true,
@@ -11,17 +11,22 @@
     "start": "node src/server.js",
     "login": "node scripts/login.js",
     "probe": "node scripts/probe.js",
-    "check": "node --check src/server.js && node --check src/loremotion.js && node --check src/browser.js && node --check src/config.js && node --check scripts/login.js && node --check scripts/verify-login.js && node --check scripts/probe.js && node --check scripts/soak-test.js",
+    "check": "node --check src/server.js && node --check src/loremotion.js && node --check src/browser.js && node --check src/config.js && node --check scripts/login.js && node --check scripts/import-profile.js && node --check scripts/mcp-list-tools.js && node --check scripts/hermes-mcp.js && node --check scripts/verify-login.js && node --check scripts/probe.js && node --check scripts/soak-test.js",
     "install-browser": "playwright install chromium",
     "soak-test": "node scripts/soak-test.js",
     "smoke-anonymous": "node scripts/soak-test.js --anonymous true --ltx-runs 1 --h3-runs 0 --verify-history false --require-signed-in false",
-    "verify-login": "node scripts/verify-login.js"
+    "verify-login": "node scripts/verify-login.js",
+    "import-profile": "node scripts/import-profile.js",
+    "check-tools": "node scripts/mcp-list-tools.js",
+    "hermes-mcp": "node scripts/hermes-mcp.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.1.0",
     "dotenv": "^17.2.2",
     "playwright": "^1.63.0",
     "zod": "^4.1.11",
-    "@modelcontextprotocol/client": "^2.1.0"
+    "@modelcontextprotocol/client": "^2.1.0",
+    "adm-zip": "^0.5.16",
+    "tar": "^7.4.3"
   }
 }

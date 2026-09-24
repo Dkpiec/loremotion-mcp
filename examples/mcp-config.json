@@ -2,13 +2,15 @@
   "mcpServers": {
     "loremotion": {
       "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/loremotion-mcp/src/server.js"],
+      "args": ["/ABSOLUTE/PATH/TO/loremotion-mcp/scripts/hermes-mcp.js"],
       "env": {
         "LOREMOTION_SESSION_MODE": "persistent",
         "LOREMOTION_PROFILE_DIR": "/ABSOLUTE/PATH/TO/loremotion-mcp/.loremotion-profile",
         "LOREMOTION_DOWNLOAD_DIR": "/ABSOLUTE/PATH/TO/loremotion-mcp/downloads",
-        "LOREMOTION_HEADLESS": "false",
-        "LOREMOTION_BROWSER_CHANNEL": "chrome"
+        "LOREMOTION_HEADLESS": "true",
+        "LOREMOTION_EXECUTABLE_PATH": "/ABSOLUTE/PATH/TO/chromium-headless-shell",
+        "LOREMOTION_BROWSER_CHANNEL": "",
+        "LOREMOTION_LAUNCH_ARGS": "--no-sandbox,--disable-dev-shm-usage,--disable-gpu"
       }
     }
   }

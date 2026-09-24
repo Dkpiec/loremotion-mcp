@@ -1,29 +1,65 @@
 # Security
 
-This repository is designed around a dedicated persistent Playwright browser profile authenticated through LoreMotion's normal Google sign-in flow.
+This repository authenticates LoreMotion by reusing a dedicated persistent Chromium profile. The profile directory is the credential.
 
-## Secrets
+## Never store account secrets in configuration
 
-The effective authentication secret is the browser profile directory configured by `LOREMOTION_PROFILE_DIR` (default `.loremotion-profile/`). It may contain session cookies and browser storage that can provide account access.
+Do **not** put any of the following in `.env`, Git, source code, MCP configuration, shell history, or agent prompts:
 
-- Never commit, upload, email, or share `.loremotion-profile/`.
-- Never place a Google password, browser cookies, OAuth refresh token, MFA seed, or recovery code in `.env`.
-- `.env` and `.loremotion-profile/` are ignored by Git in this repo.
-- Prefer a dedicated Google/LoreMotion account with only the access required for this automation.
+- Google passwords
+- OAuth access/refresh tokens
+- raw browser cookie strings
+- MFA/TOTP seeds
+- recovery codes
 
-## Authentication behavior
+The code intentionally has no field for a Google password, OAuth token, or raw cookie string.
 
-`npm run login` opens a visible browser and requires the operator to complete Google's normal sign-in/MFA flow manually. The script then checks LoreMotion's UI/dashboard state and only reports setup success when the saved profile appears authenticated.
+## Persistent profile
 
-The project does not include CAPTCHA solvers, password automation, MFA bypasses, ad bypasses, anti-detection patches, queue bypasses, or rate-limit workarounds.
+`LOREMOTION_PROFILE_DIR` defaults to `.loremotion-profile/` and may contain cookies, local storage, IndexedDB, and other browser state that provides access to the LoreMotion session.
+
+- `.loremotion-profile/` is ignored by Git.
+- Store imported profile archives outside the repository.
+- Restrict filesystem permissions on both the profile and any transfer archive.
+- Delete transfer archives after import if you no longer need them.
+- Prefer a dedicated Google/LoreMotion account with the minimum required access.
+
+## Headless profile import
+
+`npm run import-profile -- <path>` accepts only a filesystem path to a profile directory or supported archive. It does not accept credentials as strings.
+
+The importer stages the copy, checks profile completeness, removes stale Chromium lock files, installs it temporarily, and verifies the resulting LoreMotion session with the normal auth-status logic. If verification fails, the importer restores the previous profile.
+
+Profile portability can vary across operating systems/browser builds. A structurally complete profile that does not authenticate on the VPS is rejected.
+
+## Interactive login
+
+`npm run login` remains available for desktop users. It requires TTY stdin/stdout and a visible browser. On a non-interactive/headless driver it exits non-zero immediately and directs the operator to profile import.
+
+## Cloudflare
+
+This project does not solve or bypass CAPTCHAs or Cloudflare Turnstile. A visible unsolved challenge causes generation to stop with an explicit error.
+
+## Browser launch flags
+
+The default headless launch flags include:
+
+```text
+--no-sandbox
+--disable-dev-shm-usage
+--disable-gpu
+```
+
+`--no-sandbox` weakens Chromium's process sandbox and is commonly required in some containers/VPS environments. If your deployment supports Chromium sandboxing, override `LOREMOTION_LAUNCH_ARGS` and remove that flag.
 
 ## If the profile is exposed
 
-1. Sign out of LoreMotion/Google sessions associated with the automation account.
-2. Revoke the relevant Google session/device if appropriate.
-3. Delete `.loremotion-profile/` locally.
-4. Run `npm run login` to create a fresh authenticated profile.
+1. Stop Hermes/MCP processes using the profile.
+2. Sign out/revoke the relevant LoreMotion/Google session or device.
+3. Delete the compromised profile and transferred archives.
+4. Create a fresh dedicated profile on an interactive trusted machine.
+5. Transfer and import the replacement profile securely.
 
-## Deployment
+## Transport
 
-Keep the MCP transport local (stdio) unless you add your own authenticated network boundary. Do not expose this server directly to the public internet.
+The server uses MCP stdio. Keep it local to the agent process unless you add a separately authenticated network boundary. Do not expose the raw MCP process directly to the public internet.
