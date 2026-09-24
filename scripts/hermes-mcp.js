@@ -52,6 +52,9 @@ if (!status?.signedIn && config.profileImportPath) {
 if (!status?.signedIn) {
   log('No valid signed-in LoreMotion profile is available.');
   log('Authenticate once on a desktop, transfer the profile directory/archive to this server, and set LOREMOTION_PROFILE_IMPORT_PATH or run `npm run import-profile -- <path>`.');
+  if (config.sessionCookiesPath) {
+    log('LOREMOTION_SESSION_COOKIES_PATH is set but still did not produce a signed-in session. The cookies may be for the wrong domain, or they may have expired. Note: only loremotion.com session cookies can sign you into LoreMotion.');
+  }
   process.exit(3);
 }
 

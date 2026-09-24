@@ -81,7 +81,48 @@ export class BrowserManager {
     }
 
     this.context.setDefaultTimeout(config.timeoutMs);
+    await this.applyExternalCookies();
     return this.context;
+  }
+
+  /**
+   * Optional last-mile cookie injection.
+   * Reads a Playwright-format cookie JSON array from a path on disk only
+   * (never from chat, .env, or the repo) and adds it to the browser context
+   * after the persistent profile has loaded. Used when transferring a desktop
+   * profile is not possible and only session cookies are available.
+   * See SECURITY.md — the file must never be committed or pasted anywhere.
+   */
+  async applyExternalCookies() {
+    if (!config.sessionCookiesPath) return;
+    let cookies;
+    try {
+      const raw = await fs.readFile(config.sessionCookiesPath, 'utf8');
+      cookies = JSON.parse(raw);
+      if (!Array.isArray(cookies)) throw new Error('expected a JSON array of cookie objects');
+    } catch (err) {
+      process.stderr.write(`[loremotion-mcp] Could not read LOREMOTION_SESSION_COOKIES_PATH: ${err.message}. Continuing without injected cookies.\n`);
+      return;
+    }
+    const normalized = cookies
+      .map((c) => ({
+        name: String(c.name), value: String(c.value),
+        domain: String(c.domain), path: c.path ? String(c.path) : '/',
+        secure: Boolean(c.secure), httpOnly: Boolean(c.httpOnly ?? c.http_only ?? false),
+        sameSite: ['Strict','Lax','None'].includes(c.sameSite) ? c.sameSite : 'Lax',
+        expires: typeof c.expirationDate === 'number' ? c.expirationDate
+              : typeof c.expires === 'number' ? c.expires : -1
+      }))
+      .filter((c) => c.name && c.value && c.domain);
+    if (!normalized.length) {
+      process.stderr.write('[loremotion-mcp] Cookie file contained no usable cookies. Continuing without injected cookies.\n');
+      return;
+    }
+    await this.context.addCookies(normalized).catch((err) => {
+      process.stderr.write(`[loremotion-mcp] addCookies failed: ${err.message}\n`);
+    });
+    const domains = [...new Set(normalized.map((c) => c.domain))].join(', ');
+    process.stderr.write(`[loremotion-mcp] Injected ${normalized.length} cookie(s) for domain(s): ${domains}\n`);
   }
 
   async newPage(pathname = '/generate/') {

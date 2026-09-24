@@ -19,6 +19,7 @@ export const config = {
   baseUrl: (process.env.LOREMOTION_BASE_URL || 'https://loremotion.com').replace(/\/$/, ''),
   profileDir: path.resolve(process.env.LOREMOTION_PROFILE_DIR || '.loremotion-profile'),
   profileImportPath: process.env.LOREMOTION_PROFILE_IMPORT_PATH ? path.resolve(process.env.LOREMOTION_PROFILE_IMPORT_PATH) : null,
+  sessionCookiesPath: process.env.LOREMOTION_SESSION_COOKIES_PATH ? path.resolve(process.env.LOREMOTION_SESSION_COOKIES_PATH) : null,
   sessionMode: (process.env.LOREMOTION_SESSION_MODE || 'persistent').toLowerCase() === 'anonymous' ? 'anonymous' : 'persistent',
   downloadDir: path.resolve(process.env.LOREMOTION_DOWNLOAD_DIR || 'downloads'),
   headless: bool(process.env.LOREMOTION_HEADLESS, false),

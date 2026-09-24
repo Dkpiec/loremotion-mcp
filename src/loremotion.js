@@ -446,7 +446,14 @@ export class LoreMotionClient {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const shot = path.join(config.downloadDir, `error-${stamp}.png`);
       await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
-      err.message += ` Screenshot: ${shot}`;
+      // Cloudflare Turnstile on a datacenter egress kills the headless-shell page outright.
+      // Surface the real cause instead of a confusing "Target crashed"/"page closed" message.
+      const raw = String(err.message || err);
+      if (/target page, context or browser has been closed|target crashed|Target crashed/i.test(raw)) {
+        err.message = `${TURNSTILE_ERROR} (the page was destroyed mid-interaction; egress or profile) Screenshot: ${shot}`;
+      } else {
+        err.message = `${raw} Screenshot: ${shot}`;
+      }
       throw err;
     } finally {
       if (wait) await page.close();
